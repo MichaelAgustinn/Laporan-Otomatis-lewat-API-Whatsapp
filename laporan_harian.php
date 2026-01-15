@@ -1,5 +1,21 @@
 <?php
 
+/*
+Lisensi Penggunaan
+
+Hak Cipta (c) 2026 Michael Agustin
+
+Perangkat lunak ini bebas digunakan, disalin, dimodifikasi, dan didistribusikan,
+baik untuk tujuan pribadi maupun komersial, dengan ketentuan bahwa pemberitahuan
+hak cipta dan lisensi ini tidak boleh dihapus atau dihilangkan dari kode sumber
+maupun distribusi perangkat lunak.
+
+Perangkat lunak ini disediakan "sebagaimana adanya", tanpa jaminan apa pun,
+baik tersurat maupun tersirat. Penulis tidak bertanggung jawab atas segala
+kerugian yang timbul akibat penggunaan perangkat lunak ini.
+*/
+
+
 // ? baca data dari .env
 function loadEnv($path = '.env')
 {
