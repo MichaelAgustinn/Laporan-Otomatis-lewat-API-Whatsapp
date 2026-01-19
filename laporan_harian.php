@@ -2,77 +2,77 @@
 
 /*
 Lisensi Penggunaan
-
 Hak Cipta (c) 2026 Michael Agustin
-
-Perangkat lunak ini bebas digunakan, disalin, dimodifikasi, dan didistribusikan,
-baik untuk tujuan pribadi maupun komersial, dengan ketentuan bahwa pemberitahuan
-hak cipta dan lisensi ini tidak boleh dihapus atau dihilangkan dari kode sumber
-maupun distribusi perangkat lunak.
-
-Perangkat lunak ini disediakan "sebagaimana adanya", tanpa jaminan apa pun,
-baik tersurat maupun tersirat. Penulis tidak bertanggung jawab atas segala
-kerugian yang timbul akibat penggunaan perangkat lunak ini.
 */
+
+// Fungsi Helper untuk Output & Stop (Pengganti die)
+if (!function_exists('stop_process')) {
+  function stop_process($message)
+  {
+    echo $message;
+    return; // Gunakan return, jangan exit/die
+  }
+}
 
 function parseGvizDate($gvizDate)
 {
-  if (!is_string($gvizDate)) {
-    return null;
-  }
-
+  if (!is_string($gvizDate)) return null;
   if (preg_match('/Date\((\d+),(\d+),(\d+)\)/', $gvizDate, $m)) {
     $year  = (int) $m[1];
     $month = (int) $m[2] + 1;
     $day   = (int) $m[3];
-
     return new DateTime("$year-$month-$day");
   }
-
   return null;
 }
 
-
-// ? baca data dari .env
-function loadEnv($path = '.env')
+function loadEnv($path = null)
 {
+  if ($path === null) $path = __DIR__ . '/.env';
+
   if (!file_exists($path)) {
-    die('.env file tidak ditemukan');
+    echo '.env file tidak ditemukan: ' . $path;
+    return false; // Return false jika gagal
   }
 
   $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
   foreach ($lines as $line) {
     if (strpos(trim($line), '#') === 0) continue;
-
     list($name, $value) = explode('=', $line, 2);
     putenv(trim($name) . '=' . trim($value));
   }
+  return true;
 }
 
-loadEnv();
+// Load Env
+if (!loadEnv()) return; // Stop jika env gagal load
 
-// ? deklarasi variable yg di baca dari .env
+// Deklarasi variable
 $sheetId   = getenv('GOOGLE_SHEET_ID');
 $token     = getenv('FONNTE_TOKEN');
 $target    = getenv('WHATSAPP_TARGET');
 $dashboard = getenv('LOOKER_DASHBOARD_URL');
 
-// ? stop jika env tidak lengkap
+// Stop jika env tidak lengkap
 if (!$sheetId || !$token || !$target) {
-  die('Konfigurasi .env belum lengkap');
+  echo 'Konfigurasi .env belum lengkap';
+  return;
 }
 
 $url = "https://docs.google.com/spreadsheets/d/$sheetId/gviz/tq?tqx=out:json";
 
-$response = file_get_contents($url);
+// Gunakan @ untuk menyembunyikan warning jika koneksi gagal
+$response = @file_get_contents($url);
 if ($response === false) {
-  die('Gagal mengambil data Google Sheet');
+  echo 'Gagal mengambil data Google Sheet (Cek Koneksi/ID)';
+  return;
 }
 
 $json = json_decode(substr($response, 47, -2), true);
 
 if (!isset($json['table']['rows'])) {
-  die('Format data Google Sheet tidak valid');
+  echo 'Format data Google Sheet tidak valid';
+  return;
 }
 
 $rows = $json['table']['rows'];
@@ -83,24 +83,21 @@ $today = new DateTime();
 $limitDate = (clone $today)->modify('+3 months');
 
 foreach ($rows as $index => $row) {
-
   $nomor = $row['c'][3]['v'] ?? '-';
   $namaProduk = $row['c'][4]['v'] ?? '-';
   $expiredRaw = $row['c'][7]['v'] ?? null;
   $notifikasi = $row['c'][count($row['c']) - 1]['v'] ?? false;
 
-  // ? pengecekan checkbox (harus dicentang)
-  if ($notifikasi !== true && $notifikasi !== 'TRUE') {
-    continue;
-  }
+  // Pengecekan checkbox
+  if ($notifikasi !== true && $notifikasi !== 'TRUE') continue;
 
-  //? parse tanggal dari Google Sheet
+  // Parse tanggal
   $expiredDate = parseGvizDate($expiredRaw);
   if (!$expiredDate) continue;
 
-  //? LOGIKA NOTIFIKASI EXPIRED
-  if ($expiredDate > $limitDate) continue; // masih lama
-  if ($expiredDate < $today) continue;     // sudah expired
+  // LOGIKA NOTIFIKASI
+  if ($expiredDate > $limitDate) continue; // Masih lama
+  if ($expiredDate < $today) continue;     // Sudah expired
 
   $expiredFormatted = $expiredDate->format('d F Y');
 
@@ -111,15 +108,17 @@ foreach ($rows as $index => $row) {
   $no++;
 }
 
+// INI BAGIAN PENYEBAB ERROR 'T' SEBELUMNYA
 if ($no === 1) {
-  die('Tidak ada data sertifikat untuk dikirim');
+  echo 'Tidak ada data sertifikat untuk dikirim';
+  return; // Gunakan return agar script pembungkus bisa lanjut
 }
 
 if ($dashboard) {
   $pesan .= "🔗 Dashboard:\n$dashboard";
 }
 
-// ? kirim ke wa lewat fonnte
+// Kirim ke WA lewat Fonnte
 $curl = curl_init();
 
 curl_setopt_array($curl, [
@@ -136,12 +135,13 @@ curl_setopt_array($curl, [
 ]);
 
 $response = curl_exec($curl);
-
-// ? log gagal atau berhasil
-if ($response === false) {
-  die('Gagal mengirim pesan WhatsApp');
-}
-
+$curl_error = curl_error($curl); // Cek error curl
 curl_close($curl);
 
-echo "Laporan berhasil dikirim\n";
+if ($response === false) {
+  echo 'Gagal mengirim pesan WhatsApp: ' . $curl_error;
+  return;
+}
+
+echo "Laporan berhasil dikirim";
+return;
