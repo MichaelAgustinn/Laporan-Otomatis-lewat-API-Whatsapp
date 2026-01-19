@@ -15,6 +15,23 @@ baik tersurat maupun tersirat. Penulis tidak bertanggung jawab atas segala
 kerugian yang timbul akibat penggunaan perangkat lunak ini.
 */
 
+function parseGvizDate($gvizDate)
+{
+  if (!is_string($gvizDate)) {
+    return null;
+  }
+
+  if (preg_match('/Date\((\d+),(\d+),(\d+)\)/', $gvizDate, $m)) {
+    $year  = (int) $m[1];
+    $month = (int) $m[2] + 1;
+    $day   = (int) $m[3];
+
+    return new DateTime("$year-$month-$day");
+  }
+
+  return null;
+}
+
 
 // ? baca data dari .env
 function loadEnv($path = '.env')
@@ -62,21 +79,34 @@ $rows = $json['table']['rows'];
 
 $pesan = "📄 LAPORAN DATA SERTIFIKAT\n\n";
 $no = 1;
+$today = new DateTime();
+$limitDate = (clone $today)->modify('+3 months');
 
 foreach ($rows as $index => $row) {
 
-  //? ini untuk skip 1 baris
-  if ($index < 1) {
+  $nomor = $row['c'][3]['v'] ?? '-';
+  $namaProduk = $row['c'][4]['v'] ?? '-';
+  $expiredRaw = $row['c'][7]['v'] ?? null;
+  $notifikasi = $row['c'][count($row['c']) - 1]['v'] ?? false;
+
+  // ? pengecekan checkbox (harus dicentang)
+  if ($notifikasi !== true && $notifikasi !== 'TRUE') {
     continue;
   }
 
-  $nomor   = $row['c'][3]['v'] ?? '-'; // Nomor Sertifikat
-  $terbit  = $row['c'][6]['v'] ?? '-'; // Tanggal Terbit
-  $expired = $row['c'][7]['v'] ?? '-'; // Tanggal Expired
+  //? parse tanggal dari Google Sheet
+  $expiredDate = parseGvizDate($expiredRaw);
+  if (!$expiredDate) continue;
+
+  //? LOGIKA NOTIFIKASI EXPIRED
+  if ($expiredDate > $limitDate) continue; // masih lama
+  if ($expiredDate < $today) continue;     // sudah expired
+
+  $expiredFormatted = $expiredDate->format('d F Y');
 
   $pesan .= "$no. Nomor Sertifikat: $nomor\n";
-  $pesan .= "   Tanggal Terbit : $terbit\n";
-  $pesan .= "   Tanggal Expired: $expired\n\n";
+  $pesan .= "Nama Produk: $namaProduk\n";
+  $pesan .= "   Tanggal Expired: $expiredFormatted\n\n";
 
   $no++;
 }
